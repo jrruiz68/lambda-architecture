@@ -1,0 +1,82 @@
+version: '3.7'
+
+services:
+  # Kafka y Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.0.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "29092:29092"
+      - "9092:9092"
+
+  # Flink (Stream Processing)
+  jobmanager:
+    image: flink:1.15.0-scala_2.12
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+
+  taskmanager:
+    image: flink:1.15.0-scala_2.12
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+
+  # PostgreSQL (Batch y Serving)
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: medical
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Grafana (Visualización)
+  grafana:
+    image: grafana/grafana:9.0.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+
+  # Inicialización de Kafka Topics (script temporal)
+  kafka-init:
+    image: confluentinc/cp-kafka:7.0.0
+    depends_on:
+      - kafka
+    command: |
+      bash -c " 
+        sleep 10;
+        kafka-topics --create --topic patient_vitals --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1;
+        kafka-topics --create --topic ecg_stream --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1;
+        exit 0;
+      "
+  sensor-simulator:
+    image: python:3.9
+    volumes:
+      - ./:/app  # Monta el directorio actual en /app
+    command: bash -c "cd /app && pip install kafka-python faker && python sensor_simulator.py"
+    depends_on:
+      - kafka
+
+volumes:
+  postgres_data:
