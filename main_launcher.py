@@ -1,224 +1,271 @@
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, messagebox, font
 import subprocess
 import threading
 import sys
 import os
 import queue
+import webbrowser
 
-class MedicalIOTLauncher:
+class LambdaCommandCenter:
     def __init__(self, root):
         self.root = root
-        self.root.title("🏥 Medical IoT - Centro de Comando")
-        self.root.geometry("1100x700")
-        self.root.configure(bg="#2c3e50")
+        self.root.title("Medical IoT - Lambda Command Center")
+        self.root.geometry("1400x850")
+        self.root.configure(bg="#0b0f19") # Fondo oscuro profundo
 
-        # Cola para manejar mensajes: (mensaje, tag, destino)
         self.msg_queue = queue.Queue()
-        
-        # Diccionario de procesos
         self.processes = {}
-
-        self.create_widgets()
-        self.update_terminal_output()
-
-    def create_widgets(self):
-        # --- HEADER ---
-        header = tk.Frame(self.root, bg="#34495e", pady=10)
-        header.pack(fill="x")
-        title = tk.Label(header, text="Arquitectura Lambda - Monitor de Procesos", 
-                         font=("Segoe UI", 16, "bold"), bg="#34495e", fg="white")
-        title.pack()
-
-        # --- BOTONES DE CONTROL ---
-        btn_frame = tk.Frame(self.root, bg="#2c3e50", pady=15)
-        btn_frame.pack(fill="x")
-
-        # Botón 1: Entrenar
-        self.btn_train = tk.Button(btn_frame, text="🧠 1. Entrenar Modelo", 
-                                   command=self.run_training, bg="#2980b9", fg="white", 
-                                   font=("Arial", 10, "bold"), width=20)
-        self.btn_train.grid(row=0, column=0, padx=20)
-
-        # Botón 2: Sensor
-        self.btn_sensor = tk.Button(btn_frame, text="💓 2. Iniciar Sensor", 
-                                    command=self.run_sensor, bg="#27ae60", fg="white", 
-                                    font=("Arial", 10, "bold"), width=20)
-        self.btn_sensor.grid(row=0, column=1, padx=20)
-
-        # Botón 3: Detector
-        self.btn_detector = tk.Button(btn_frame, text="🔎 3. Iniciar Detector", 
-                                      command=self.run_detector, bg="#e67e22", fg="white", 
-                                      font=("Arial", 10, "bold"), width=20)
-        self.btn_detector.grid(row=0, column=2, padx=20)
-
-        # Botón 4: Stop
-        self.btn_stop = tk.Button(btn_frame, text="🛑 DETENER TODO", 
-                                  command=self.stop_all, bg="#c0392b", fg="white", 
-                                  font=("Arial", 10, "bold"), width=20)
-        self.btn_stop.grid(row=0, column=3, padx=20)
-
-        # --- ÁREA DE TERMINALES (SPLIT VIEW) ---
-        term_container = tk.Frame(self.root, bg="#2c3e50", padx=10, pady=10)
-        term_container.pack(fill="both", expand=True)
-
-        # Configurar grid para que se expanda
-        term_container.columnconfigure(0, weight=1)
-        term_container.columnconfigure(1, weight=1)
-        term_container.columnconfigure(2, weight=1)
-        term_container.rowconfigure(1, weight=1)
-
-        # -- Columna 1: Entrenamiento --
-        lbl_1 = tk.Label(term_container, text="Log: Entrenamiento (Batch)", bg="#2980b9", fg="white", font=("Arial", 9, "bold"))
-        lbl_1.grid(row=0, column=0, sticky="ew", padx=2)
-        self.term_train = self.create_console(term_container)
-        self.term_train.grid(row=1, column=0, sticky="nsew", padx=2)
-
-        # -- Columna 2: Sensor --
-        lbl_2 = tk.Label(term_container, text="Log: Sensor (Producer)", bg="#27ae60", fg="white", font=("Arial", 9, "bold"))
-        lbl_2.grid(row=0, column=1, sticky="ew", padx=2)
-        self.term_sensor = self.create_console(term_container)
-        self.term_sensor.grid(row=1, column=1, sticky="nsew", padx=2)
-
-        # -- Columna 3: Detector --
-        lbl_3 = tk.Label(term_container, text="Log: Detector (Consumer)", bg="#e67e22", fg="white", font=("Arial", 9, "bold"))
-        lbl_3.grid(row=0, column=2, sticky="ew", padx=2)
-        self.term_detect = self.create_console(term_container)
-        self.term_detect.grid(row=1, column=2, sticky="nsew", padx=2)
-
-        # Mapeo de claves a widgets
-        self.consoles = {
-            "TRAIN": self.term_train,
-            "SENSOR": self.term_sensor,
-            "DETECT": self.term_detect
+        
+        # Contadores Globales
+        self.counters = {
+            "SENSOR": tk.IntVar(value=0),
+            "ANOMALIES": tk.IntVar(value=0)
         }
 
-    def create_console(self, parent):
-        """Crea un widget de texto estilo terminal"""
-        term = scrolledtext.ScrolledText(parent, bg="#1e1e1e", fg="#00ff00", 
-                                         font=("Consolas", 9), state="disabled", height=10)
-        term.tag_config("INFO", foreground="#00ff00")
-        term.tag_config("ERROR", foreground="#ff4444")
-        term.tag_config("WARN", foreground="#f1c40f")
-        term.tag_config("SYSTEM", foreground="#3498db")
-        return term
+        self.setup_styles()
+        self.create_layout()
+        self.update_loop()
 
-    def log(self, message, tag="INFO", target="SYSTEM"):
-        """Encola el mensaje para la consola correcta"""
-        self.msg_queue.put((message, tag, target))
+    def setup_styles(self):
+        """Define la paleta de colores y fuentes estilo Terminal Moderna"""
+        self.colors = {
+            "bg": "#0b0f19",
+            "panel": "#1e293b",
+            "text": "#e2e8f0",
+            "header": "#0f172a",
+            "accent": "#38bdf8",
+            "success": "#10b981",
+            "warning": "#f59e0b",
+            "danger": "#ef4444",
+            "batch": "#8b5cf6"
+        }
+        self.fonts = {
+            "title": font.Font(family="Consolas", size=18, weight="bold"),
+            "subtitle": font.Font(family="Segoe UI", size=12, weight="bold"),
+            "console": font.Font(family="Consolas", size=9),
+            "btn": font.Font(family="Segoe UI", size=9, weight="bold")
+        }
 
-    def update_terminal_output(self):
-        """Procesa la cola y actualiza la GUI"""
+    def create_layout(self):
+        # ==========================================
+        # HEADER (TOP BAR)
+        # ==========================================
+        header_frame = tk.Frame(self.root, bg=self.colors["header"], height=70)
+        header_frame.pack(fill="x", side="top")
+        header_frame.pack_propagate(False)
+
+        title = tk.Label(header_frame, text="⚡ LAMBDA ARCHITECTURE COMMAND CENTER", 
+                         font=self.fonts["title"], bg=self.colors["header"], fg=self.colors["accent"])
+        title.pack(side="left", padx=20, pady=15)
+
+        # Estadísticas en vivo
+        stats_frame = tk.Frame(header_frame, bg=self.colors["header"])
+        stats_frame.pack(side="right", padx=20, pady=15)
+
+        tk.Label(stats_frame, text="LATIDOS ENVIADOS:", font=self.fonts["btn"], bg=self.colors["header"], fg="#94a3b8").pack(side="left")
+        tk.Label(stats_frame, textvariable=self.counters["SENSOR"], font=self.fonts["subtitle"], bg=self.colors["header"], fg=self.colors["success"]).pack(side="left", padx=(5, 20))
+        
+        tk.Label(stats_frame, text="ANOMALÍAS:", font=self.fonts["btn"], bg=self.colors["header"], fg="#94a3b8").pack(side="left")
+        tk.Label(stats_frame, textvariable=self.counters["ANOMALIES"], font=self.fonts["subtitle"], bg=self.colors["header"], fg=self.colors["danger"]).pack(side="left", padx=5)
+
+        # ==========================================
+        # TOOLBAR (BOTONES GLOBALES)
+        # ==========================================
+        toolbar = tk.Frame(self.root, bg=self.colors["bg"], pady=10)
+        toolbar.pack(fill="x", padx=20)
+
+        tk.Button(toolbar, text="🛑 DETENER TODO", command=self.stop_all, bg=self.colors["danger"], fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="left")
+        
+        tk.Button(toolbar, text="🧠 Abrir MLflow", command=lambda: webbrowser.open("http://localhost:5000"), bg="#1d4ed8", fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="right", padx=5)
+        tk.Button(toolbar, text="📊 Abrir Grafana", command=lambda: webbrowser.open("http://localhost:3000"), bg="#ea580c", fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="right")
+
+        # ==========================================
+        # MAIN GRID (LOS 5 MÓDULOS)
+        # ==========================================
+        main_grid = tk.Frame(self.root, bg=self.colors["bg"])
+        main_grid.pack(fill="both", expand=True, padx=15, pady=5)
+
+        # Configuración de los 5 scripts del proyecto
+        self.modules = {
+            "TRAIN":  {"path": "batch/train_model.py", "name": "1. Pre-Entrenamiento", "color": self.colors["batch"]},
+            "SENSOR": {"path": "streaming/ecg_producer.py", "name": "2. Sensor ECG (Fuente)", "color": self.colors["success"]},
+            "LAKE":   {"path": "streaming/raw_to_datalake.py", "name": "3A. Data Lake Ingest", "color": self.colors["accent"]},
+            "DETECT": {"path": "streaming/anomaly_detector.py", "name": "3B. Speed Layer (IA)", "color": self.colors["warning"]},
+            "BATCH":  {"path": "batch/batch_daily_processor.py", "name": "4. Batch Processor (Diario)", "color": self.colors["danger"]}
+        }
+
+        self.consoles = {}
+        self.leds = {}
+
+        # Dibujar los módulos en un grid dinámico
+        row, col = 0, 0
+        for key, info in self.modules.items():
+            self.create_module_panel(main_grid, key, info, row, col)
+            col += 1
+            if col > 2: # 3 columnas máximo
+                col = 0
+                row += 1
+
+        # Centrar el grid configurando pesos
+        for i in range(3): main_grid.columnconfigure(i, weight=1)
+        for i in range(2): main_grid.rowconfigure(i, weight=1)
+
+    def create_module_panel(self, parent, key, info, row, col):
+        """Crea el panel individual (GUI) para cada script"""
+        panel = tk.Frame(parent, bg=self.colors["panel"], bd=0, highlightbackground="#334155", highlightthickness=1)
+        panel.grid(row=row, column=col, sticky="nsew", padx=10, pady=10)
+
+        # Título del panel
+        header = tk.Frame(panel, bg=self.colors["panel"])
+        header.pack(fill="x", padx=10, pady=(10, 5))
+
+        # Indicador LED
+        led_canvas = tk.Canvas(header, width=12, height=12, bg=self.colors["panel"], highlightthickness=0)
+        led_canvas.pack(side="left", pady=2)
+        self.leds[key] = led_canvas.create_oval(2, 2, 10, 10, fill="#475569") # Gris apagado
+
+        tk.Label(header, text=info["name"], font=self.fonts["subtitle"], bg=self.colors["panel"], fg=info["color"]).pack(side="left", padx=5)
+
+        # Botones de control del módulo
+        ctrl = tk.Frame(panel, bg=self.colors["panel"])
+        ctrl.pack(fill="x", padx=10, pady=5)
+        
+        btn_start = tk.Button(ctrl, text="▶ START", command=lambda k=key: self.start_proc(k), bg="#334155", fg="white", relief="flat", font=self.fonts["btn"], width=8)
+        btn_start.pack(side="left", padx=2)
+        
+        btn_stop = tk.Button(ctrl, text="⏹ STOP", command=lambda k=key: self.stop_proc(k), bg="#334155", fg="white", relief="flat", font=self.fonts["btn"], width=8)
+        btn_stop.pack(side="left", padx=2)
+
+        btn_clear = tk.Button(ctrl, text="🗑 CLEAR", command=lambda k=key: self.clear_console(k), bg="#334155", fg="white", relief="flat", font=self.fonts["btn"])
+        btn_clear.pack(side="right", padx=2)
+
+        # Consola de salida
+        console = scrolledtext.ScrolledText(panel, bg="#020617", fg="#10b981", font=self.fonts["console"], state="disabled", bd=0, padx=5, pady=5)
+        console.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
+        # Tags de color para la consola
+        console.tag_config("ERROR", foreground=self.colors["danger"])
+        console.tag_config("SYSTEM", foreground=self.colors["accent"])
+        console.tag_config("ALERT", foreground=self.colors["warning"], background="#451a03")
+        
+        self.consoles[key] = console
+
+    # ==========================================
+    # LOGICA DE PROCESOS Y ACTUALIZACIÓN
+    # ==========================================
+    def log(self, key, text, tag=None):
+        """Encola el mensaje para mostrarlo en la GUI de forma segura"""
+        self.msg_queue.put((key, text, tag))
+
+    def update_loop(self):
+        """Revisa la cola y actualiza la GUI sin congelarla"""
         while not self.msg_queue.empty():
-            msg, tag, target = self.msg_queue.get()
+            key, text, tag = self.msg_queue.get()
             
-            # Determinar a qué consola va
-            widget = self.consoles.get(target)
-            
-            # Si es un mensaje de sistema global, mandar a todas (opcional)
-            # O si el target no existe, ignorar
-            if widget:
-                widget.config(state="normal")
-                widget.insert(tk.END, msg + "\n", tag)
-                widget.see(tk.END)
-                widget.config(state="disabled")
-        
-        self.root.after(100, self.update_terminal_output)
+            # Lógica de detección para contadores globales
+            if "Enviando segundo" in text:
+                self.counters["SENSOR"].set(self.counters["SENSOR"].get() + 1)
+            if "🚨 ANOMALÍA" in text:
+                self.counters["ANOMALIES"].set(self.counters["ANOMALIES"].get() + 1)
+                tag = "ALERT" # Colorear fondo si es alerta
+            if "Error" in text or "Exception" in text or "[ERR]" in text:
+                tag = "ERROR"
 
-    def run_script(self, script_path, key, display_name):
+            if key in self.consoles:
+                c = self.consoles[key]
+                c.config(state="normal")
+                if tag:
+                    c.insert(tk.END, f"{text}\n", tag)
+                else:
+                    c.insert(tk.END, f"{text}\n")
+                c.see(tk.END)
+                c.config(state="disabled")
+        
+        self.root.after(50, self.update_loop)
+
+    def set_led(self, key, is_on):
+        """Cambia el color del círculo a verde (On) o gris (Off)"""
+        color = self.modules[key]["color"] if is_on else "#475569"
+        canvas = self.root.nametowidget(self.leds[key])
+        # Buscamos el canvas padre iterando (truco de Tkinter)
+        for child in self.root.winfo_children():
+            self._update_led_recursive(child, key, color)
+
+    def _update_led_recursive(self, widget, key, color):
+        if isinstance(widget, tk.Canvas):
+            items = widget.find_all()
+            if items and items[0] == self.leds[key]:
+                widget.itemconfig(items[0], fill=color)
+                return
+        for child in widget.winfo_children():
+            self._update_led_recursive(child, key, color)
+
+    def start_proc(self, key):
         if key in self.processes:
-            self.log(f"⚠️ {display_name} ya está corriendo.", "WARN", key)
+            self.log(key, f"⚠️ El proceso ya está en ejecución.", "SYSTEM")
             return
-
-        full_path = os.path.join(os.getcwd(), script_path)
-        if not os.path.exists(full_path):
-            self.log(f"❌ No encuentro: {full_path}", "ERROR", key)
-            return
-
-        self.log(f"🚀 Iniciando {display_name}...", "SYSTEM", key)
         
-        # Entorno UTF-8 (Fix Emojis)
-        my_env = os.environ.copy()
-        my_env["PYTHONIOENCODING"] = "utf-8"
+        path = self.modules[key]["path"]
+        if not os.path.exists(path):
+            self.log(key, f"❌ Archivo no encontrado: {path}", "ERROR")
+            return
 
-        cmd = [sys.executable, "-u", full_path]
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8" # Fix para Emojis en Windows
         
         try:
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            
-            p = subprocess.Popen(cmd, 
-                                 stdout=subprocess.PIPE, 
-                                 stderr=subprocess.PIPE, 
-                                 bufsize=1, 
-                                 universal_newlines=True, 
-                                 encoding='utf-8',
-                                 startupinfo=startupinfo,
-                                 env=my_env)
-            
+
+            p = subprocess.Popen([sys.executable, "-u", path], 
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 text=True, encoding='utf-8', env=env, startupinfo=startupinfo)
             self.processes[key] = p
+            self.set_led(key, True)
+            self.log(key, f"▶ INICIANDO: {self.modules[key]['name']}", "SYSTEM")
 
-            # Hilos de lectura
-            t_out = threading.Thread(target=self.read_stream, args=(p.stdout, "", "INFO", key))
-            t_out.daemon = True
-            t_out.start()
-
-            t_err = threading.Thread(target=self.read_stream, args=(p.stderr, "[ERR] ", "ERROR", key))
-            t_err.daemon = True
-            t_err.start()
+            threading.Thread(target=self.stream_watcher, args=(p.stdout, key), daemon=True).start()
+            threading.Thread(target=self.stream_watcher, args=(p.stderr, key, "[ERR] "), daemon=True).start()
+            
+            # Hilo para detectar cuando el proceso termina solo (como los scripts Batch)
+            threading.Thread(target=self.wait_proc, args=(p, key), daemon=True).start()
 
         except Exception as e:
-            self.log(f"❌ Error crítico: {e}", "ERROR", key)
+            self.log(key, f"❌ Error fatal: {e}", "ERROR")
 
-    def read_stream(self, stream, prefix, tag, key):
-        """Lee la salida y la manda a la consola correspondiente"""
+    def stream_watcher(self, stream, key, prefix=""):
         for line in iter(stream.readline, ''):
-            if line:
-                self.log(f"{prefix}{line.strip()}", tag, key)
+            if line: self.log(key, f"{prefix}{line.strip()}")
         stream.close()
 
-    # --- ACCIONES ---
-    def run_training(self):
-        self.btn_train.config(state="disabled")
-        threading.Thread(target=self._run_training_thread).start()
+    def wait_proc(self, p, key):
+        p.wait()
+        if key in self.processes:
+            del self.processes[key]
+            self.set_led(key, False)
+            self.log(key, f"⏹ PROCESO FINALIZADO", "SYSTEM")
 
-    def _run_training_thread(self):
-        self.run_script("batch/train_model.py", "TRAIN", "Entrenamiento")
-        # Reactivar botón tras 5 seg
-        self.root.after(5000, lambda: self.btn_train.config(state="normal"))
-
-    def run_sensor(self):
-        self.run_script("streaming/ecg_producer.py", "SENSOR", "Simulador")
-        self.btn_sensor.config(state="disabled", bg="#7f8c8d")
-
-    def run_detector(self):
-        self.run_script("streaming/anomaly_detector.py", "DETECT", "Detector")
-        self.btn_detector.config(state="disabled", bg="#7f8c8d")
+    def stop_proc(self, key):
+        if key in self.processes:
+            self.processes[key].terminate()
+            # El hilo wait_proc se encargará de limpiar el diccionario y apagar el LED
 
     def stop_all(self):
-        self.log("🛑 Deteniendo procesos...", "SYSTEM", "TRAIN") # Mensaje a todas o una
-        
-        killed = 0
-        keys_to_del = []
-        for key, p in self.processes.items():
-            if p.poll() is None:
-                p.terminate()
-                keys_to_del.append(key)
-                killed += 1
-                self.log("⏹️ Proceso detenido.", "WARN", key)
-        
-        for key in keys_to_del:
-            del self.processes[key]
+        for key in list(self.processes.keys()):
+            self.stop_proc(key)
 
-        self.btn_sensor.config(state="normal", bg="#27ae60")
-        self.btn_detector.config(state="normal", bg="#e67e22")
+    def clear_console(self, key):
+        self.consoles[key].config(state="normal")
+        self.consoles[key].delete('1.0', tk.END)
+        self.consoles[key].config(state="disabled")
 
-    def on_closing(self):
+    def on_close(self):
         self.stop_all()
         self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = MedicalIOTLauncher(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app = LambdaCommandCenter(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
