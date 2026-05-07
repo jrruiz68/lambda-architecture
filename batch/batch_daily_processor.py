@@ -4,12 +4,20 @@ import psycopg2
 from datetime import datetime
 import pandas as pd
 
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
+
 # --- CONFIGURACIÓN ---
 POSTGRES_CONFIG = {
-    "host": "localhost", "port": "5432",
-    "database": "medical_iot", "user": "admin", "password": "admin"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "database": os.getenv("DB_NAME", "medical_iot"),
+    "user": os.getenv("DB_USER", "admin"),
+    "password": os.getenv("DB_PASSWORD", "admin")
 }
-DATALAKE_BASE = 'data/datalake'
+DATALAKE_BASE = os.getenv("DATALAKE_PATH", 'data/datalake')
 
 def run_batch_processor(target_date_str=None):
     # Si no le pasamos fecha, procesa el día de hoy

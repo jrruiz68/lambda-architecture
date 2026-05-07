@@ -4,10 +4,16 @@ import mlflow
 import mlflow.sklearn
 from sklearn.ensemble import IsolationForest
 
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
+
 # --- CONFIGURACIÓN ---
 DATA_PATH = 'data/raw/100'  # Ruta local al archivo 100.dat
-MLFLOW_URI = "http://localhost:5000"
-EXPERIMENT_NAME = "Deteccion_Arritmias_ECG"
+MLFLOW_URI = os.getenv("MLFLOW_URI", "http://localhost:5001")
+EXPERIMENT_NAME = "Deteccion_Arritmias_ECG_V1"
 
 def train():
     print("🧠 Iniciando entrenamiento del modelo...")
@@ -49,9 +55,12 @@ def train():
         mlflow.log_param("model_type", "IsolationForest")
         
         # Guardar el modelo en el registro de modelos de MLflow
-        mlflow.sklearn.log_model(model, "model_ecg")
-        
-        print("✅ Modelo entrenado y enviado a MLflow exitosamente.")
+        mlflow.sklearn.log_model(
+            sk_model=model, 
+            artifact_path="model_ecg",
+            registered_model_name="model_ecg" 
+        )
+        print("✅ Modelo entrenado y registrado en MLflow como 'model_ecg'.")
         print(f"   ID del Experimento: {mlflow.active_run().info.run_id}")
 
 if __name__ == "__main__":

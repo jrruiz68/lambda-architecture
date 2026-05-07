@@ -77,7 +77,7 @@ class LambdaCommandCenter:
 
         tk.Button(toolbar, text="🛑 DETENER TODO", command=self.stop_all, bg=self.colors["danger"], fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="left")
         
-        tk.Button(toolbar, text="🧠 Abrir MLflow", command=lambda: webbrowser.open("http://localhost:5000"), bg="#1d4ed8", fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="right", padx=5)
+        tk.Button(toolbar, text="🧠 Abrir MLflow", command=lambda: webbrowser.open("http://localhost:5001"), bg="#1d4ed8", fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="right", padx=5)
         tk.Button(toolbar, text="📊 Abrir Grafana", command=lambda: webbrowser.open("http://localhost:3000"), bg="#ea580c", fg="white", font=self.fonts["btn"], relief="flat", padx=15, pady=5).pack(side="right")
 
         # ==========================================
@@ -89,7 +89,7 @@ class LambdaCommandCenter:
         # Configuración de los 5 scripts del proyecto
         self.modules = {
             "TRAIN":  {"path": "batch/train_model.py", "name": "1. Pre-Entrenamiento", "color": self.colors["batch"]},
-            "SENSOR": {"path": "streaming/ecg_producer.py", "name": "2. Sensor ECG (Fuente)", "color": self.colors["success"]},
+            "SENSOR": {"path": "data_sources/sensor_simulador.py", "name": "2. Sensor ECG (Fuente)", "color": self.colors["success"]},
             "LAKE":   {"path": "streaming/raw_to_datalake.py", "name": "3A. Data Lake Ingest", "color": self.colors["accent"]},
             "DETECT": {"path": "streaming/anomaly_detector.py", "name": "3B. Speed Layer (IA)", "color": self.colors["warning"]},
             "BATCH":  {"path": "batch/batch_daily_processor.py", "name": "4. Batch Processor (Diario)", "color": self.colors["danger"]}
