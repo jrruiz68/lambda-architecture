@@ -65,13 +65,20 @@ Copia la plantilla de variables de entorno y ajusta las credenciales si es neces
 cp .env.example .env
 ```
 
-### 2. Clonar e Instalar Dependencias
+### 2. Preparar el Entorno e Instalar Dependencias (¡Paso Crítico!)
 
-> **Nota:** Se utiliza `kafka-python-ng` para garantizar la compatibilidad nativa con Python 3.12+.
+Para garantizar que librerías médicas como `wfdb` y conectores como `kafka-python-ng` funcionen correctamente sin afectar tu sistema global, **debes aislar el proyecto en un entorno virtual**.
 
+**En Windows (PowerShell / CMD):**
 ```bash
+# 1. Crear el entorno virtual
+python -m venv venv
+
+# 2. Activar el entorno virtual
+venv\Scripts\activate
+
+# 3. Instalar las dependencias exactas
 pip install -r requirements.txt
-```
 
 ### 3. Configurar Base de Datos MLflow y Datos Médicos
 
@@ -121,7 +128,7 @@ python streaming/anomaly_detector.py
 python batch/scheduler.py
 ```
 
-> **Nota:** Si usas la GUI `main_launcher.py`, puedes omitir el Paso 4 y controlar los procesos directamente desde la interfaz.
+> **Nota:** Si usas la GUI `main_launcher.py`, puedes omitir el Paso 4 y controlar los procesos directamente desde la interfaz. Aun asi, se aconseja encarecidamente utilizar los comandos propuestos para tener un mejor entendimiento del funcionamiento de la arquitectura y facilitar la depuración de errores.
 
 ---
 
@@ -136,20 +143,53 @@ python batch/scheduler.py
 
 **URL:** `http://localhost:3000` (usuario: `admin` / contraseña: `admin`)
 
-**Query de Anomalías en Vivo (Speed Layer):**
+Para visualizar correctamente el flujo de datos y las alertas, sigue estos pasos de configuración en el dashboard:
+
+#### 1. Conexión de la Base de Datos (Data Source)
+- **Tipo:** PostgreSQL
+- **Host:** `postgres:5432` (si usas Docker) o `localhost:5432`
+- **Database:** `medical_iot` | **User:** `admin` | **Password:** `admin`
+- **TLS/SSL Mode:** disable
+- **Paso Crítico:** Haz clic en *Save & Test*. Si aparece en verde, la comunicación con la base de datos es exitosa.
+
+#### 2. Panel de Monitoreo en Tiempo Real (Speed Layer)
+Para ver la señal de ECG y los puntos de anomalía superpuestos en la misma gráfica:
+- **Tipo de Visualización:** Time series
+
+**Query A (Línea de Ritmo Continuo):**
 ```sql
-SELECT timestamp AS "time", ecg_value AS "ANOMALÍA"
-FROM cardiac_anomalies
-WHERE is_anomaly = true
+SELECT timestamp AS "time", ecg_value 
+FROM cardiac_anomalies 
 ORDER BY timestamp ASC
 ```
 
-**Query de Tendencias (Batch Layer):**
+**Query B (Puntos de Alerta):**
 ```sql
-SELECT fecha AS "time", promedio_ecg AS "Media ECG", max_ecg AS "Pico Máximo"
-FROM vitals_daily_batch
+SELECT timestamp AS "time", ecg_value AS "ANOMALÍA" 
+FROM cardiac_anomalies 
+WHERE is_anomaly = true 
+ORDER BY timestamp ASC
+```
+
+- **Ajuste de Estilo (Panel de la derecha):** Para la serie "ANOMALÍA", ve a *Overrides* y añade una regla para que el estilo sea *Points* (tamaño 10) y el color sea *Rojo Intenso*. Esto dibujará un punto sobre la línea cada vez que el modelo detecte una arritmia.
+
+#### 3. Panel de Tendencias Históricas (Batch Layer)
+- **Tipo de Visualización:** Table (Tabla) o Stat
+
+**Query:**
+```sql
+SELECT 
+  fecha AS "time", 
+  promedio_ecg AS "Media ECG", 
+  max_ecg AS "Pico Máximo", 
+  min_ecg AS "Pico Mínimo"
+FROM vitals_daily_batch 
 ORDER BY fecha DESC
 ```
+
+#### 4. Notas para evitar fallos de visualización
+- **Rango de Tiempo:** En la esquina superior derecha de Grafana, asegúrate de cambiar el rango a "Last 5 minutes" o "Last 15 minutes". Por defecto suele estar en 6 horas y los datos nuevos se ven como una línea muy pequeña al final.
+- **Auto-Refresh:** Activa la actualización automática (ícono de reloj arriba a la derecha) cada 5 segundos para ver el "latido" del sistema en vivo.
 
 ---
 
